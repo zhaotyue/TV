@@ -23,9 +23,8 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Switch to official Media3 & generate compatibility stubs
+      - name: Configure official Media3 dependencies and fix missing ids
         run: |
-          # 1. 在 app/build.gradle 注入官方公开的 Media3 依赖，替代缺失的 lib-mpvplayer-release.aar
           if ! grep -q "androidx.media3:media3-exoplayer" app/build.gradle; then
             cat <<'EOF' >> app/build.gradle
 
@@ -42,17 +41,3 @@ jobs:
               implementation "androidx.media3:media3-extractor:${media3Version}"
               implementation "androidx.media3:media3-common:${media3Version}"
           }
-          EOF
-          fi
-
-          # 2. 屏蔽 buildSrc 中对 lib-mpvplayer-release.aar 的强校验（若存在）
-          if [ -f buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy ]; then
-            sed -i 's/.*mpvArchive.*/\/\/ disabled mpvArchive/g' buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy || true
-          fi
-
-          # 3. 补全布局中缺失的 exo_* 资源 ID
-          mkdir -p app/src/main/res/values
-          {
-            echo '<?xml version="1.0" encoding="utf-8"?>'
-            echo '<resources>'
-            grep -rhoE 'exo_[a-zA-Z0-9_]+' app/src | sort -u | while read -r
