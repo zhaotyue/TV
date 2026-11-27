@@ -18,23 +18,43 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Prepare build config
+      - name: Inspect line 59 and prepare build config
         run: |
           groovy="buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
           if [ -f "$groovy" ]; then
             sed -i 's/.*mpvArchive.*/\/\/ disabled mpvArchive/g' "$groovy" || true
           fi
 
-          sdk_path="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          printf "sdk.dir=%s\n" "$sdk_path" > local.properties
+          nl -ba app/build.gradle | sed -n '50,70p'
 
-          python3 -c '
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/ci-debug.jks" \
+            -alias tvdebug \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass 123456 \
+            -keypass 123456 \
+            -dname "CN=TV, OU=CI, O=TV, L=City, ST=State, C=CN"
+
+          sdk_path="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          cat <<EOF > local.properties
+          sdk.dir=$sdk_path
+          storeFile=$RUNNER_TEMP/ci-debug.jks
+          storePassword=123456
+          keyAlias=tvdebug
+          keyPassword=123456
+          EOF
+
+          python3 - <<'PY'
           p = "app/build.gradle"
-          s = open(p, "r", encoding="utf-8", errors="ignore").read()
+          with open(p, "r", encoding="utf-8", errors="ignore") as f:
+              s = f.read()
           if "compileSdk" not in s:
               s = s.replace("android {", "android {\n    compileSdk = 35", 1)
-              open(p, "w", encoding="utf-8").write(s)
-          '
+          with open(p, "w", encoding="utf-8") as f:
+              f.write(s)
+          PY
 
       - name: Build Debug APK
         run: |
