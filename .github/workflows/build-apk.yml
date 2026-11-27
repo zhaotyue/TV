@@ -57,15 +57,18 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Inspect dependencies and build Debug APK
+      - name: Inspect repo files and repositories
         run: |
-          echo "=== libs.versions.toml ==="
-          cat gradle/libs.versions.toml || true
-          echo "=== app dependencies ==="
-          ./gradlew :app:dependencies --configuration leanbackDebugCompileClasspath --no-configuration-cache || true
-          ./gradlew assembleDebug --no-configuration-cache
-        env:
-          ORG_GRADLE_PROJECT_COMPILE_TASK_PARALLELISM: "true"
+          echo "=== root & app/libs ==="
+          ls -la
+          ls -la app/libs || true
+          echo "=== settings.gradle / settings.gradle.kts ==="
+          cat settings.gradle 2>/dev/null || cat settings.gradle.kts 2>/dev/null || true
+          echo "=== root build.gradle ==="
+          cat build.gradle 2>/dev/null || true
+
+      - name: Build Debug APK
+        run: ./gradlew assembleDebug --no-configuration-cache
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
