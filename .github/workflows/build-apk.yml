@@ -25,9 +25,15 @@ jobs:
 
       - name: Configure official Media3 dependencies and fix missing ids
         run: |
-          if ! grep -q "androidx.media3:media3-exoplayer" app/build.gradle; then
-            cat <<'EOF' >> app/build.gradle
+          python3 - <<'PY'
+          import os, re
 
+          gradle_path = "app/build.gradle"
+          with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
+              content = f.read()
+
+          if "androidx.media3:media3-exoplayer" not in content:
+              media3_block = """
           dependencies {
               def media3Version = "1.5.1"
               implementation "androidx.media3:media3-exoplayer:${media3Version}"
@@ -41,3 +47,34 @@ jobs:
               implementation "androidx.media3:media3-extractor:${media3Version}"
               implementation "androidx.media3:media3-common:${media3Version}"
           }
+          """
+              with open(gradle_path, "w", encoding="utf-8") as f:
+                  f.write(content + media3_block)
+
+          groovy_path = "buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
+          if os.path.exists(groovy_path):
+              with open(groovy_path, "r", encoding="utf-8", errors="ignore") as f:
+                  g_lines = f.readlines()
+              with open(groovy_path, "w", encoding="utf-8") as f:
+                  for line in g_lines:
+                      if "mpvArchive" in line:
+                          f.write("// " + line)
+                      else:
+                          f.write(line)
+
+          ids = set()
+          for root, _, files in os.walk("app/src"):
+              for fn in files:
+                  if fn.endswith((".xml", ".java", ".kt")):
+                      p = os.path.join(root, fn)
+                      try:
+                          with open(p, "r", encoding="utf-8", errors="ignore") as f:
+                              ids.update(re.findall(r"\bexo_[a-zA-Z0-9_]+\b", f.read()))
+                      except Exception:
+                          pass
+
+          os.makedirs("app/src/main/res/values", exist_ok=True)
+          xml_lines = ['<?xml version="1.0" encoding="utf-8"?>', "<resources>"]
+          for name in sorted(ids):
+              xml_lines.append(f'    <item type="id" name="{name}" />')
+          xml_lines.append
