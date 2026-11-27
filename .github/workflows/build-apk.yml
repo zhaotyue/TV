@@ -23,184 +23,58 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Configure official Media3 dependencies and fix missing ids
+      - name: Prepare Media3 and ids
+        run: python3 -c '
+import os, re
+p = "app/build.gradle"
+s = open(p, "r", encoding="utf-8", errors="ignore").read()
+if "androidx.media3:media3-exoplayer" not in s:
+    s += "\ndependencies {\n    def v = \"1.5.1\"\n    implementation \"androidx.media3:media3-exoplayer:${v}\"\n    implementation \"androidx.media3:media3-ui:${v}\"\n    implementation \"androidx.media3:media3-session:${v}\"\n    implementation \"androidx.media3:media3-datasource:${v}\"\n    implementation \"androidx.media3:media3-datasource-okhttp:${v}\"\n    implementation \"androidx.media3:media3-extractor:${v}\"\n    implementation \"androidx.media3:media3-common:${v}\"\n}\n"
+    open(p, "w", encoding="utf-8").write(s)
+g = "buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
+if os.path.exists(g):
+    lines = ["// " + l if "mpvArchive" in l else l for l in open(g, "r", encoding="utf-8", errors="ignore").readlines()]
+    open(g, "w", encoding="utf-8").writelines(lines)
+ids = set()
+for r, _, fs in os.walk("app/src"):
+    for f in fs:
+        if f.endswith((".xml", ".java", ".kt")):
+            ids.update(re.findall(r"\bexo_[a-zA-Z0-9_]+\b", open(os.path.join(r, f), "r", encoding="utf-8", errors="ignore").read()))
+os.makedirs("app/src/main/res/values", exist_ok=True)
+xml = ["<?xml version=\"1.0\" encoding=\"utf-8\"?>", "<resources>"] + [f"    <item type=\"id\" name=\"{x}\" />" for x in sorted(ids)] + ["</resources>"]
+open("app/src/main/res/values/ci_fix_ids.xml", "w", encoding="utf-8").write("\n".join(xml) + "\n")
+'
+
+      - name: Prepare compatibility stubs
+        run: python3 -c '
+import os
+files = {
+    "app/src/main/java/androidx/media3/mpvplayer/MpvLibrary.java": "package androidx.media3.mpvplayer;\nimport android.content.Context;\npublic class MpvLibrary { public static void init(Context c) {} public static boolean isAvailable() { return false; } }\n",
+    "app/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java": "package androidx.media3.mpvplayer;\nimport android.content.Context;\nimport androidx.media3.exoplayer.ExoPlayer;\npublic class MpvPlayer { public static ExoPlayer create(Context c) { return new ExoPlayer.Builder(c).build(); } }\n",
+    "app/src/main/java/androidx/media3/mpvplayer/media/MpvDrmSupport.java": "package androidx.media3.mpvplayer.media;\npublic class MpvDrmSupport { public static boolean isSupported() { return false; } }\n",
+    "app/src/main/java/androidx/media3/ui/PlayerSeekView.java": "package androidx.media3.ui;\nimport android.content.Context;\nimport android.util.AttributeSet;\npublic class PlayerSeekView extends DefaultTimeBar { public PlayerSeekView(Context c) { super(c); } public PlayerSeekView(Context c, AttributeSet a) { super(c, a); } public PlayerSeekView(Context c, AttributeSet a, int d) { super(c, a, d); } }\n",
+    "app/src/main/java/androidx/media3/common/DecoderMode.java": "package androidx.media3.common;\npublic class DecoderMode { public static final int AUTO = 0; public static final int HARDWARE = 1; public static final int SOFTWARE = 2; }\n",
+    "app/src/main/java/androidx/media3/common/DiscMenuController.java": "package androidx.media3.common;\npublic class DiscMenuController { public void showMenu() {} }\n",
+    "app/src/main/java/androidx/media3/common/DiscMenuState.java": "package androidx.media3.common;\npublic class DiscMenuState { public boolean isAvailable() { return false; } }\n",
+    "app/src/main/java/androidx/media3/common/MediaChapter.java": "package androidx.media3.common;\npublic class MediaChapter { public long startMs; public long endMs; public String title = \"\"; }\n",
+    "app/src/main/java/androidx/media3/common/VideoTransform.java": "package androidx.media3.common;\npublic class VideoTransform { public float scaleX = 1f; public float scaleY = 1f; public float rotation = 0f; }\n",
+    "app/src/main/java/androidx/media3/common/text/SubtitleContent.java": "package androidx.media3.common.text;\npublic class SubtitleContent { public String text = \"\"; }\n",
+    "app/src/main/java/androidx/media3/common/text/SubtitleOffsets.java": "package androidx.media3.common.text;\npublic class SubtitleOffsets { public long offsetMs = 0L; }\n",
+    "app/src/main/java/androidx/media3/common/text/SubtitleSelectionState.java": "package androidx.media3.common.text;\npublic class SubtitleSelectionState { public int selectedIndex = -1; }\n",
+}
+for k, v in files.items():
+    os.makedirs(os.path.dirname(k), exist_ok=True)
+    open(k, "w", encoding="utf-8").write(v)
+'
+
+      - name: Setup signing and local.properties
         run: |
-          python3 - <<'PY'
-          import os, re
-
-          gradle_path = "app/build.gradle"
-          with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
-              content = f.read()
-
-          if "androidx.media3:media3-exoplayer" not in content:
-              media3_block = """
-          dependencies {
-              def media3Version = "1.5.1"
-              implementation "androidx.media3:media3-exoplayer:${media3Version}"
-              implementation "androidx.media3:media3-exoplayer-dash:${media3Version}"
-              implementation "androidx.media3:media3-exoplayer-hls:${media3Version}"
-              implementation "androidx.media3:media3-exoplayer-rtsp:${media3Version}"
-              implementation "androidx.media3:media3-ui:${media3Version}"
-              implementation "androidx.media3:media3-session:${media3Version}"
-              implementation "androidx.media3:media3-datasource:${media3Version}"
-              implementation "androidx.media3:media3-datasource-okhttp:${media3Version}"
-              implementation "androidx.media3:media3-extractor:${media3Version}"
-              implementation "androidx.media3:media3-common:${media3Version}"
-          }
-          """
-              with open(gradle_path, "w", encoding="utf-8") as f:
-                  f.write(content + media3_block)
-
-          groovy_path = "buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
-          if os.path.exists(groovy_path):
-              with open(groovy_path, "r", encoding="utf-8", errors="ignore") as f:
-                  g_lines = f.readlines()
-              with open(groovy_path, "w", encoding="utf-8") as f:
-                  for line in g_lines:
-                      if "mpvArchive" in line:
-                          f.write("// " + line)
-                      else:
-                          f.write(line)
-
-          ids = set()
-          for root, _, files in os.walk("app/src"):
-              for fn in files:
-                  if fn.endswith((".xml", ".java", ".kt")):
-                      p = os.path.join(root, fn)
-                      try:
-                          with open(p, "r", encoding="utf-8", errors="ignore") as f:
-                              ids.update(re.findall(r"\bexo_[a-zA-Z0-9_]+\b", f.read()))
-                      except Exception:
-                          pass
-
-          os.makedirs("app/src/main/res/values", exist_ok=True)
-          xml_lines = ['<?xml version="1.0" encoding="utf-8"?>', "<resources>"]
-          for name in sorted(ids):
-              xml_lines.append(f'    <item type="id" name="{name}" />')
-          xml_lines.append("</resources>")
-          with open("app/src/main/res/values/ci_fix_ids.xml", "w", encoding="utf-8") as f:
-              f.write("\n".join(xml_lines) + "\n")
-          print(f"Configured Media3 and generated {len(ids)} exo_* ids.")
-          PY
-
-      - name: Generate compatibility stubs
-        run: |
-          python3 - <<'PY'
-          import os
-
-          stubs = {
-              "app/src/main/java/androidx/media3/mpvplayer/MpvLibrary.java": """package androidx.media3.mpvplayer;
-          import android.content.Context;
-          public class MpvLibrary {
-              public static void init(Context context) {}
-              public static boolean isAvailable() { return false; }
-          }
-          """,
-              "app/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java": """package androidx.media3.mpvplayer;
-          import android.content.Context;
-          import androidx.media3.exoplayer.ExoPlayer;
-          public class MpvPlayer {
-              public static ExoPlayer create(Context context) {
-                  return new ExoPlayer.Builder(context).build();
-              }
-          }
-          """,
-              "app/src/main/java/androidx/media3/mpvplayer/media/MpvDrmSupport.java": """package androidx.media3.mpvplayer.media;
-          public class MpvDrmSupport {
-              public static boolean isSupported() { return false; }
-          }
-          """,
-              "app/src/main/java/androidx/media3/ui/PlayerSeekView.java": """package androidx.media3.ui;
-          import android.content.Context;
-          import android.util.AttributeSet;
-          public class PlayerSeekView extends DefaultTimeBar {
-              public PlayerSeekView(Context context) { super(context); }
-              public PlayerSeekView(Context context, AttributeSet attrs) { super(context, attrs); }
-              public PlayerSeekView(Context context, AttributeSet attrs, int defStyleAttr) { super(context, attrs, defStyleAttr); }
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/DecoderMode.java": """package androidx.media3.common;
-          public class DecoderMode {
-              public static final int AUTO = 0;
-              public static final int HARDWARE = 1;
-              public static final int SOFTWARE = 2;
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/DiscMenuController.java": """package androidx.media3.common;
-          public class DiscMenuController {
-              public void showMenu() {}
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/DiscMenuState.java": """package androidx.media3.common;
-          public class DiscMenuState {
-              public boolean isAvailable() { return false; }
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/MediaChapter.java": """package androidx.media3.common;
-          public class MediaChapter {
-              public long startMs;
-              public long endMs;
-              public String title = "";
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/VideoTransform.java": """package androidx.media3.common;
-          public class VideoTransform {
-              public float scaleX = 1f;
-              public float scaleY = 1f;
-              public float rotation = 0f;
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/text/SubtitleContent.java": """package androidx.media3.common.text;
-          public class SubtitleContent {
-              public String text = "";
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/text/SubtitleOffsets.java": """package androidx.media3.common.text;
-          public class SubtitleOffsets {
-              public long offsetMs = 0L;
-          }
-          """,
-              "app/src/main/java/androidx/media3/common/text/SubtitleSelectionState.java": """package androidx.media3.common.text;
-          public class SubtitleSelectionState {
-              public int selectedIndex = -1;
-          }
-          """,
-          }
-
-          for path, code in stubs.items():
-              os.makedirs(os.path.dirname(path), exist_ok=True)
-              with open(path, "w", encoding="utf-8") as f:
-                  f.write(code)
-          print(f"Generated {len(stubs)} stub files.")
-          PY
-
-      - name: Generate temporary keystore and local.properties
-        run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -alias tvdebug \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass 123456 \
-            -keypass 123456 \
-            -dname "CN=TV, OU=CI, O=TV, L=City, ST=State, C=CN"
-
-          cat <<EOF > local.properties
-          sdk.dir=$ANDROID_SDK_ROOT
-          storeFile=$RUNNER_TEMP/ci-debug.jks
-          keyAlias=tvdebug
-          storePassword=123456
-          EOF
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
+          keytool -genkeypair -v -keystore "$RUNNER_TEMP/ci-debug.jks" -alias tvdebug -keyalg RSA -keysize 2048 -validity 10000 -storepass 123456 -keypass 123456 -dname "CN=TV, OU=CI, O=TV, L=City, ST=State, C=CN"
+          printf "sdk.dir=%s\nstoreFile=%s/ci-debug.jks\nkeyAlias=tvdebug\nstorePassword=123456\n" "$ANDROID_SDK_ROOT" "$RUNNER_TEMP" > local.properties
+          chmod +x gradlew
 
       - name: Build Debug APK
-        run: |
-          ./gradlew assembleDebug --no-configuration-cache
-          echo "=== Generated APKs ==="
-          find . -path "*/build/outputs/apk/*" -name "*.apk" -print
+        run: ./gradlew assembleDebug --no-configuration-cache
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
