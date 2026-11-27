@@ -21,15 +21,14 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Inspect and ensure exo_duration id exists
+      - name: Ensure missing player control ids exist
         run: |
-          echo "=== Searching exo_duration in repo ==="
-          grep -rn "exo_duration" app/src || true
           mkdir -p app/src/main/res/values
           cat <<EOF > app/src/main/res/values/ci_fix_ids.xml
           <?xml version="1.0" encoding="utf-8"?>
           <resources>
               <item type="id" name="exo_duration" />
+              <item type="id" name="exo_position" />
           </resources>
           EOF
 
