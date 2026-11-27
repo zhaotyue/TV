@@ -7,11 +7,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - uses: actions/setup-java@v5
+      - name: Set up JDK 21
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
@@ -43,48 +45,46 @@ jobs:
           EOF
 
           python3 - <<'PY'
-          import os
-          import re
+import os
+import re
 
-          # 1. Inject official Media3 dependencies into app/build.gradle
-          gradle_path = "app/build.gradle"
-          with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
-              g = f.read()
+gradle_path = "app/build.gradle"
+with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
+    g = f.read()
 
-          if "androidx.media3:media3-exoplayer" not in g:
-              media3_block = """
-          dependencies {
-              def m3 = "1.5.1"
-              implementation "androidx.media3:media3-exoplayer:${m3}"
-              implementation "androidx.media3:media3-ui:${m3}"
-              implementation "androidx.media3:media3-session:${m3}"
-              implementation "androidx.media3:media3-datasource:${m3}"
-              implementation "androidx.media3:media3-datasource-okhttp:${m3}"
-              implementation "androidx.media3:media3-extractor:${m3}"
-              implementation "androidx.media3:media3-common:${m3}"
-          }
-          """
-              with open(gradle_path, "w", encoding="utf-8") as f:
-                  f.write(g + media3_block)
+if "androidx.media3:media3-exoplayer" not in g:
+    media3_block = """
+dependencies {
+    def m3 = "1.5.1"
+    implementation "androidx.media3:media3-exoplayer:${m3}"
+    implementation "androidx.media3:media3-ui:${m3}"
+    implementation "androidx.media3:media3-session:${m3}"
+    implementation "androidx.media3:media3-datasource:${m3}"
+    implementation "androidx.media3:media3-datasource-okhttp:${m3}"
+    implementation "androidx.media3:media3-extractor:${m3}"
+    implementation "androidx.media3:media3-common:${m3}"
+}
+"""
+    with open(gradle_path, "w", encoding="utf-8") as f:
+        f.write(g + media3_block)
 
-          # 2. Generate exo_* IDs
-          ids = {
-              "exo_duration", "exo_position", "exo_progress", "exo_play", "exo_pause",
-              "exo_ffwd", "exo_rew", "exo_prev", "exo_next", "exo_subtitle",
-              "exo_settings", "exo_fullscreen", "exo_buffering", "exo_artwork",
-              "exo_shutter", "exo_content_frame", "exo_error_message",
-              "exo_ad_overlay", "exo_buffering_view", "exo_controller",
-              "exo_controller_placeholder", "exo_overlay", "exo_player_view",
-              "exo_subtitles",
-          }
-          pattern = re.compile(r"\bexo_[a-zA-Z0-9_]+\b")
-          for root, _, files in os.walk("."):
-              norm = root.replace("\\", "/")
-              if "/build/" in norm or "/.git/" in norm:
-                  continue
-              for fn in files:
-                  if fn.endswith((".xml", ".java", ".kt")):
-                      fp = os.path.join(root, fn)
-                      try:
-                          with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                              ids.update(pattern.findall(f.read()))
+ids = {
+    "exo_duration", "exo_position", "exo_progress", "exo_play", "exo_pause",
+    "exo_ffwd", "exo_rew", "exo_prev", "exo_next", "exo_subtitle",
+    "exo_settings", "exo_fullscreen", "exo_buffering", "exo_artwork",
+    "exo_shutter", "exo_content_frame", "exo_error_message",
+    "exo_ad_overlay", "exo_buffering_view", "exo_controller",
+    "exo_controller_placeholder", "exo_overlay", "exo_player_view",
+    "exo_subtitles",
+}
+pattern = re.compile(r"\bexo_[a-zA-Z0-9_]+\b")
+for root, _, files in os.walk("."):
+    norm = root.replace("\\", "/")
+    if "/build/" in norm or "/.git/" in norm:
+        continue
+    for fn in files:
+        if fn.endswith((".xml", ".java", ".kt")):
+            fp = os.path.join(root, fn)
+            try:
+                with open(fp, "r", encoding="utf-8", errors="ignore") as f:
+                    ids.update(
