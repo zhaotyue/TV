@@ -7,69 +7,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Configure official Media3 and missing resource IDs
-        run: |
-          cat <<'PY' > /tmp/prep_media3.py
-          import os
-          import re
-
-          gradle_path = "app/build.gradle"
-          with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
-              content = f.read()
-
-          if "androidx.media3:media3-exoplayer" not in content:
-              block = """
-          dependencies {
-              def v = "1.5.1"
-              implementation "androidx.media3:media3-exoplayer:${v}"
-              implementation "androidx.media3:media3-ui:${v}"
-              implementation "androidx.media3:media3-session:${v}"
-              implementation "androidx.media3:media3-datasource:${v}"
-              implementation "androidx.media3:media3-datasource-okhttp:${v}"
-              implementation "androidx.media3:media3-extractor:${v}"
-              implementation "androidx.media3:media3-common:${v}"
-          }
-          """
-              with open(gradle_path, "w", encoding="utf-8") as f:
-                  f.write(content + block)
-
-          groovy_path = "buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
-          if os.path.exists(groovy_path):
-              with open(groovy_path, "r", encoding="utf-8", errors="ignore") as f:
-                  lines = f.readlines()
-              with open(groovy_path, "w", encoding="utf-8") as f:
-                  for line in lines:
-                      if "mpvArchive" in line:
-                          f.write("// " + line)
-                      else:
-                          f.write(line)
-
-          ids = set()
-          pattern = re.compile(r"\bexo_[a-zA-Z0-9_]+\b")
-          for root, _, files in os.walk("app/src"):
-              for fn in files:
-                  if fn.endswith((".xml", ".java", ".kt")):
-                      fp = os.path.join(root, fn)
-                      try:
-                          with open(fp, "r", encoding="utf-8", errors="ignore") as f:
-                              ids.update(pattern.findall(f.read()))
-                      except OSError:
-                          pass
-
-          os.makedirs("app/src/main/res/values", exist_ok=True)
-          xml_lines = ['<?xml version="1.0" encoding="utf-8"?>', "<resources>"]
-          for name in sorted(ids):
-              xml_lines.append(f'    <item type="id" name="{name}" />')
-          xml_lines.append("</resources>")
-          with open("app/src/main/res/
+      - uses: actions/checkout@v4
+      - run: |
+          pwd
+          ls -la
+          cat .github/workflows/build-apk.yml
