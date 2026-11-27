@@ -21,16 +21,17 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Ensure missing player control ids exist
+      - name: Ensure missing exo_* ids exist
         run: |
           mkdir -p app/src/main/res/values
-          cat <<EOF > app/src/main/res/values/ci_fix_ids.xml
-          <?xml version="1.0" encoding="utf-8"?>
-          <resources>
-              <item type="id" name="exo_duration" />
-              <item type="id" name="exo_position" />
-          </resources>
-          EOF
+          {
+            echo '<?xml version="1.0" encoding="utf-8"?>'
+            echo '<resources>'
+            grep -rhoE 'exo_[a-zA-Z0-9_]+' app/src | sort -u | while read -r id_name; do
+              echo "    <item type=\"id\" name=\"${id_name}\" />"
+            done
+            echo '</resources>'
+          } > app/src/main/res/values/ci_fix_ids.xml
 
       - name: Generate temporary keystore and local.properties
         run: |
