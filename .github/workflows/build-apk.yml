@@ -15,60 +15,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          submodules: recursive
+          fetch-depth: 0
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Ensure missing exo_* ids exist
+      - name: Check branches and search aar
         run: |
-          mkdir -p app/src/main/res/values
-          {
-            echo '<?xml version="1.0" encoding="utf-8"?>'
-            echo '<resources>'
-            grep -rhoE 'exo_[a-zA-Z0-9_]+' app/src | sort -u | while read -r id_name; do
-              echo "    <item type=\"id\" name=\"${id_name}\" />"
-            done
-            echo '</resources>'
-          } > app/src/main/res/values/ci_fix_ids.xml
-
-      - name: Generate temporary keystore and local.properties
-        run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -alias tvdebug \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass 123456 \
-            -keypass 123456 \
-            -dname "CN=TV, OU=CI, O=TV, L=City, ST=State, C=CN"
-
-          cat <<EOF > local.properties
-          sdk.dir=$ANDROID_SDK_ROOT
-          storeFile=$RUNNER_TEMP/ci-debug.jks
-          keyAlias=tvdebug
-          storePassword=123456
-          EOF
-
-      - name: Grant execute permission for gradlew
-        run: chmod +x gradlew
-
-      - name: Inspect repo files and media3 references
-        run: |
-          echo "=== ALL FILES (.aar / .jar / .toml / gradle) ==="
-          find . -maxdepth 4 \( -name "*.aar" -o -name "*.jar" -o -name "*.toml" -o -name "*gradle*" \) | sort
-          echo "=== GREP media3 / mpvplayer ==="
-          grep -rnE "media3|mpvplayer" . --exclude-dir=.git --exclude-dir=build || true
-
-      - name: Build Debug APK
-        run: ./gradlew assembleDebug --no-configuration-cache
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug-apk
-          path: "**/build/outputs/apk/debug/*.apk"
+          echo "=== Local & Remote Branches ==="
+          git branch -a
+          echo "=== Search lib-mpvplayer-release.aar via GitHub API ==="
+          curl -s "https://api.github.com/search/code?q=lib-mpvplayer-release.aar" | head -c 1500 || true
+          echo ""
