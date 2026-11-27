@@ -57,15 +57,12 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Inspect repo files and repositories
+      - name: Inspect repo files and media3 references
         run: |
-          echo "=== root & app/libs ==="
-          ls -la
-          ls -la app/libs || true
-          echo "=== settings.gradle / settings.gradle.kts ==="
-          cat settings.gradle 2>/dev/null || cat settings.gradle.kts 2>/dev/null || true
-          echo "=== root build.gradle ==="
-          cat build.gradle 2>/dev/null || true
+          echo "=== ALL FILES (.aar / .jar / .toml / gradle) ==="
+          find . -maxdepth 4 \( -name "*.aar" -o -name "*.jar" -o -name "*.toml" -o -name "*gradle*" \) | sort
+          echo "=== GREP media3 / mpvplayer ==="
+          grep -rnE "media3|mpvplayer" . --exclude-dir=.git --exclude-dir=build || true
 
       - name: Build Debug APK
         run: ./gradlew assembleDebug --no-configuration-cache
