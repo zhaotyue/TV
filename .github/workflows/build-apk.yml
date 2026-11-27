@@ -22,6 +22,18 @@ jobs:
           if [ -f "$groovy" ]; then
             sed -i 's/.*mpvArchive.*/\/\/ disabled mpvArchive/g' "$groovy" || true
           fi
+
+          sdk_path="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
+          printf "sdk.dir=%s\n" "$sdk_path" > local.properties
+
+          python3 -c '
+p = "app/build.gradle"
+s = open(p, "r", encoding="utf-8", errors="ignore").read()
+if "compileSdk" not in s:
+    s = s.replace("android {", "android {\n    compileSdk = 35", 1)
+    open(p, "w", encoding="utf-8").write(s)
+'
+
           chmod +x gradlew
           ./gradlew assembleDebug --no-configuration-cache
           find . -path "*/build/outputs/apk/*" -name "*.apk" -print
