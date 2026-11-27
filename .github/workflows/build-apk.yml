@@ -8,7 +8,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: |
-          pwd
-          ls -la
-          cat .github/workflows/build-apk.yml
+        with:
+          submodules: recursive
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Build Debug APK
+        run: |
+          groovy="buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
+          if [ -f "$groovy" ]; then
+            sed -i 's/.*mpvArchive.*/\/\/ disabled mpvArchive/g' "$groovy" || true
+          fi
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-configuration-cache
+          find . -path "*/build/outputs/apk/*" -name "*.apk" -print
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug-apk
+          path: "**/build/outputs/apk/debug/*.apk"
+          if-no-files-found: warn
