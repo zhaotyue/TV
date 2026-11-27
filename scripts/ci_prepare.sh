@@ -21,21 +21,11 @@ sdk_path="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
 printf "sdk.dir=%s\nstoreFile=%s\nkeyAlias=tvrelease\nstorePassword=123456\n" \
   "$sdk_path" "$keystore_path" > local.properties
 
-python3 - <<'PY'
-import os
-import re
+python3 -c '
+import os, re
 
 gradle_path = "app/build.gradle"
 with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
     content = f.read()
 
-if "androidx.media3:media3-exoplayer" not in content:
-    dep_block = """
-dependencies {
-    def m3 = "1.5.1"
-    implementation "androidx.media3:media3-exoplayer:${m3}"
-    implementation "androidx.media3:media3-ui:${m3}"
-    implementation "androidx.media3:media3-session:${m3}"
-    implementation "androidx.media3:media3-datasource:${m3}"
-    implementation "androidx.media3:media3-datasource-okhttp:${m3}"
-    implementation "androidx.media3:media3-extractor:${m3}"
+if "androidx.media3:media3
