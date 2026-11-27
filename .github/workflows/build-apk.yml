@@ -7,57 +7,79 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: "21"
 
-      - name: Inspect line 59 and prepare build config
+      - name: Build Debug APK
         run: |
           groovy="buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy"
           if [ -f "$groovy" ]; then
             sed -i 's/.*mpvArchive.*/\/\/ disabled mpvArchive/g' "$groovy" || true
           fi
 
-          nl -ba app/build.gradle | sed -n '50,70p'
-
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/ci-debug.jks" \
-            -alias tvdebug \
-            -keyalg RSA \
-            -keysize 2048 \
-            -validity 10000 \
-            -storepass 123456 \
-            -keypass 123456 \
-            -dname "CN=TV, OU=CI, O=TV, L=City, ST=State, C=CN"
-
           sdk_path="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-          cat <<EOF > local.properties
-          sdk.dir=$sdk_path
-          storeFile=$RUNNER_TEMP/ci-debug.jks
-          storePassword=123456
-          keyAlias=tvdebug
-          keyPassword=123456
-          EOF
+          printf "sdk.dir=%s\n" "$sdk_path" > local.properties
 
           python3 - <<'PY'
-          p = "app/build.gradle"
-          with open(p, "r", encoding="utf-8", errors="ignore") as f:
+          import os
+          import re
+
+          gradle_path = "app/build.gradle"
+          with open(gradle_path, "r", encoding="utf-8", errors="ignore") as f:
               s = f.read()
           if "compileSdk" not in s:
               s = s.replace("android {", "android {\n    compileSdk = 35", 1)
-          with open(p, "w", encoding="utf-8") as f:
+          with open(gradle_path, "w", encoding="utf-8") as f:
               f.write(s)
+
+          ids = {
+              "exo_duration",
+              "exo_position",
+              "exo_progress",
+              "exo_play",
+              "exo_pause",
+              "exo_ffwd",
+              "exo_rew",
+              "exo_prev",
+              "exo_next",
+              "exo_subtitle",
+              "exo_settings",
+              "exo_fullscreen",
+              "exo_buffering",
+              "exo_artwork",
+              "exo_shutter",
+              "exo_content_frame",
+              "exo_error_message",
+          }
+          pattern = re.compile(r"\bexo_[a-zA-Z0-9_]+\b")
+          for root, _, files in os.walk("."):
+              if "/build/" in root.replace("\\", "/") or "/.git/" in root.replace("\\", "/"):
+                  continue
+              for fn in files:
+                  if fn.endswith((".xml", ".java", ".kt")):
+                      fp = os.path.join(root, fn)
+                      try:
+                          with open(fp, "r", encoding="utf-8", errors="ignore") as f:
+                              ids.update(pattern.findall(f.read()))
+                      except OSError:
+                          pass
+
+          os.makedirs("app/src/main/res/values", exist_ok=True)
+          lines = ['<?xml version="1.0" encoding="utf-8"?>', "<resources>"]
+          for name in sorted(ids):
+              lines.append(f'    <item type="id" name="{name}" />')
+          lines.append("</resources>")
+          with open("app/src/main/res/values/ci_fix_ids.xml", "w", encoding="utf-8") as f:
+              f.write("\n".join(lines) + "\n")
+          print(f"Generated {len(ids)} exo_* IDs.")
           PY
 
-      - name: Build Debug APK
-        run: |
           chmod +x gradlew
           ./gradlew assembleDebug --no-configuration-cache
           find . -path "*/build/outputs/apk/*" -name "*.apk" -print
